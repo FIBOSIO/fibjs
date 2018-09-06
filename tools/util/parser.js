@@ -404,24 +404,48 @@ function parser_comment(comment) {
   return doc;
 }
 
-module.exports = function (baseFolder) {
-  var defs = {};
+module.exports = function (baseFolder, defs) {
+  var defs1 = {};
+  var collect = {};
 
   fs.readdir(baseFolder).sort().forEach(f => {
-    if (path.extname(f) == '.idl') {
+    if (f === 'collect.json') {
+      f = path.join(baseFolder, f);
+      collect = JSON.parse(fs.readTextFile(f));
+    } else if (path.extname(f) == '.idl') {
       f = path.join(baseFolder, f);
       var def = parser.parse(fs.readTextFile(f));
-      defs[def.declare.name] = def;
+
+      def.declare.doc = parser_comment(def.declare.comments);
+      for (var m in def.members)
+        def.members[m].doc = parser_comment(def.members[m].comments);
+
+      defs1[def.declare.name] = def;
     }
   });
 
-  for (var n in defs) {
-    defs[n].declare.doc = parser_comment(defs[n].declare.comments);
-    for (var m in defs[n].members)
-      defs[n].members[m].doc = parser_comment(defs[n].members[m].comments);
+  var defs2 = {};
+  for (var g in collect) {
+    collect[g].forEach(n => {
+      var def = defs1[n];
+      def.collect = g;
+      defs2[n] = def;
+      delete defs1[n];
+    });
   }
 
-  delete defs['object'].declare.extend;
+  for (var n in defs1) {
+    defs2[n] = defs1[n];
+  }
 
-  return defs;
+  if (defs) {
+    for (var n in defs) {
+      defs[n].__skip = true;
+      defs2[n] = defs[n];
+    }
+  }
+
+  delete defs2['object'].declare.extend;
+
+  return defs2;
 };

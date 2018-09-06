@@ -31,11 +31,16 @@ public:
     virtual result_t add(v8::Local<v8::Object> mods) = 0;
     virtual result_t addScript(exlib::string srcname, Buffer_base* script, v8::Local<v8::Value>& retVal) = 0;
     virtual result_t remove(exlib::string id) = 0;
+    virtual result_t has(exlib::string id, bool& retVal) = 0;
     virtual result_t clone(obj_ptr<SandBox_base>& retVal) = 0;
+    virtual result_t freeze() = 0;
+    virtual result_t refresh() = 0;
     virtual result_t run(exlib::string fname, v8::Local<v8::Array> argv) = 0;
     virtual result_t resolve(exlib::string id, exlib::string base, exlib::string& retVal) = 0;
     virtual result_t require(exlib::string id, exlib::string base, v8::Local<v8::Value>& retVal) = 0;
+    virtual result_t setModuleCompiler(exlib::string extname, v8::Local<v8::Function> compiler) = 0;
     virtual result_t get_global(v8::Local<v8::Object>& retVal) = 0;
+    virtual result_t get_modules(v8::Local<v8::Object>& retVal) = 0;
 
 public:
     template <typename T>
@@ -46,11 +51,16 @@ public:
     static void s_add(const v8::FunctionCallbackInfo<v8::Value>& args);
     static void s_addScript(const v8::FunctionCallbackInfo<v8::Value>& args);
     static void s_remove(const v8::FunctionCallbackInfo<v8::Value>& args);
+    static void s_has(const v8::FunctionCallbackInfo<v8::Value>& args);
     static void s_clone(const v8::FunctionCallbackInfo<v8::Value>& args);
+    static void s_freeze(const v8::FunctionCallbackInfo<v8::Value>& args);
+    static void s_refresh(const v8::FunctionCallbackInfo<v8::Value>& args);
     static void s_run(const v8::FunctionCallbackInfo<v8::Value>& args);
     static void s_resolve(const v8::FunctionCallbackInfo<v8::Value>& args);
     static void s_require(const v8::FunctionCallbackInfo<v8::Value>& args);
+    static void s_setModuleCompiler(const v8::FunctionCallbackInfo<v8::Value>& args);
     static void s_get_global(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args);
+    static void s_get_modules(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args);
 };
 }
 
@@ -63,14 +73,19 @@ inline ClassInfo& SandBox_base::class_info()
         { "add", s_add, false },
         { "addScript", s_addScript, false },
         { "remove", s_remove, false },
+        { "has", s_has, false },
         { "clone", s_clone, false },
+        { "freeze", s_freeze, false },
+        { "refresh", s_refresh, false },
         { "run", s_run, false },
         { "resolve", s_resolve, false },
-        { "require", s_require, false }
+        { "require", s_require, false },
+        { "setModuleCompiler", s_setModuleCompiler, false }
     };
 
     static ClassData::ClassProperty s_property[] = {
-        { "global", s_get_global, block_set, false }
+        { "global", s_get_global, block_set, false },
+        { "modules", s_get_modules, block_set, false }
     };
 
     static ClassData s_cd = {
@@ -183,6 +198,23 @@ inline void SandBox_base::s_remove(const v8::FunctionCallbackInfo<v8::Value>& ar
     METHOD_VOID();
 }
 
+inline void SandBox_base::s_has(const v8::FunctionCallbackInfo<v8::Value>& args)
+{
+    bool vr;
+
+    METHOD_NAME("SandBox.has");
+    METHOD_INSTANCE(SandBox_base);
+    METHOD_ENTER();
+
+    METHOD_OVER(1, 1);
+
+    ARG(exlib::string, 0);
+
+    hr = pInst->has(v0, vr);
+
+    METHOD_RETURN();
+}
+
 inline void SandBox_base::s_clone(const v8::FunctionCallbackInfo<v8::Value>& args)
 {
     obj_ptr<SandBox_base> vr;
@@ -196,6 +228,32 @@ inline void SandBox_base::s_clone(const v8::FunctionCallbackInfo<v8::Value>& arg
     hr = pInst->clone(vr);
 
     METHOD_RETURN();
+}
+
+inline void SandBox_base::s_freeze(const v8::FunctionCallbackInfo<v8::Value>& args)
+{
+    METHOD_NAME("SandBox.freeze");
+    METHOD_INSTANCE(SandBox_base);
+    METHOD_ENTER();
+
+    METHOD_OVER(0, 0);
+
+    hr = pInst->freeze();
+
+    METHOD_VOID();
+}
+
+inline void SandBox_base::s_refresh(const v8::FunctionCallbackInfo<v8::Value>& args)
+{
+    METHOD_NAME("SandBox.refresh");
+    METHOD_INSTANCE(SandBox_base);
+    METHOD_ENTER();
+
+    METHOD_OVER(0, 0);
+
+    hr = pInst->refresh();
+
+    METHOD_VOID();
 }
 
 inline void SandBox_base::s_run(const v8::FunctionCallbackInfo<v8::Value>& args)
@@ -250,6 +308,22 @@ inline void SandBox_base::s_require(const v8::FunctionCallbackInfo<v8::Value>& a
     METHOD_RETURN();
 }
 
+inline void SandBox_base::s_setModuleCompiler(const v8::FunctionCallbackInfo<v8::Value>& args)
+{
+    METHOD_NAME("SandBox.setModuleCompiler");
+    METHOD_INSTANCE(SandBox_base);
+    METHOD_ENTER();
+
+    METHOD_OVER(2, 2);
+
+    ARG(exlib::string, 0);
+    ARG(v8::Local<v8::Function>, 1);
+
+    hr = pInst->setModuleCompiler(v0, v1);
+
+    METHOD_VOID();
+}
+
 inline void SandBox_base::s_get_global(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args)
 {
     v8::Local<v8::Object> vr;
@@ -259,6 +333,19 @@ inline void SandBox_base::s_get_global(v8::Local<v8::Name> property, const v8::P
     PROPERTY_ENTER();
 
     hr = pInst->get_global(vr);
+
+    METHOD_RETURN();
+}
+
+inline void SandBox_base::s_get_modules(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args)
+{
+    v8::Local<v8::Object> vr;
+
+    METHOD_NAME("SandBox.modules");
+    METHOD_INSTANCE(SandBox_base);
+    PROPERTY_ENTER();
+
+    hr = pInst->get_modules(vr);
 
     METHOD_RETURN();
 }

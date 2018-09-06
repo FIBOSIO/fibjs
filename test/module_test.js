@@ -70,6 +70,12 @@ describe("module", () => {
         });
     });
 
+    it("require error json", () => {
+        assert.throws(() => {
+            require('./module/data_err');
+        });
+    });
+
     it("require .js module folder", () => {
         assert.deepEqual(require('./module/p4.js'), {
             "v": 100
@@ -85,6 +91,10 @@ describe("module", () => {
         assert.deepEqual(require('./module/d1'), {
             "d": 100
         });
+    });
+
+    it("require async file", () => {
+        assert.equal(require('./module/d2'), 100);
     });
 
     it("support symlink", () => {

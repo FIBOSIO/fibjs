@@ -17,12 +17,14 @@ describe("db", () => {
     it("format", () => {
         assert.equal(db.format("test?", [1, 2, 3, 4]), "test(1,2,3,4)");
         assert.equal(db.format("test?", [1, [2, 3], 4]), "test(1,(2,3),4)");
+        assert.equal(db.format("test?"), "test?");
     });
 
     it("formatMySQL", () => {
         assert.equal(db.formatMySQL("test?, ?, ?, ?", 123, 'ds\r\na',
                 new Date('1998-4-14 12:12:12')),
-            "test123, 'ds\\r\\na', '1998-04-14 12:12:12', ''");
+            "test123, 'ds\\r\\na', '1998-04-14 12:12:12', ?");
+        assert.equal(db.formatMySQL("test?"), "test?");
     });
 
     function _test(conn_str) {
@@ -58,6 +60,11 @@ describe("db", () => {
             })
         });
 
+        it("empty sql", () => {
+            var rs = conn.execute('select "?" as v');
+            assert.equal(rs[0].v, '?');
+        });
+
         it("escape", () => {
             var rs = conn.execute("select ? as t;", '123456\r\n\'\"\x1acccds');
             assert.equal(rs[0].t, '123456\r\n\'\"\x1acccds');
@@ -65,7 +72,7 @@ describe("db", () => {
 
         it("create table", () => {
             if (conn.type == 'mssql')
-                conn.execute('create table test(t1 int, t2 varchar(128), t3 VARBINARY(100), t4 datetime);');
+                conn.execute('create table test(t0 INT IDENTITY PRIMARY KEY, t1 int, t2 varchar(128), t3 VARBINARY(100), t4 datetime);');
             else {
                 conn.execute('create table test(t0 INTEGER AUTO_INCREMENT PRIMARY KEY, t1 int, t2 varchar(128), t3 BLOB, t4 datetime);');
                 conn.execute('create table test_null(t1 int NULL, t2 varchar(128) NULL, t3 BLOB NULL, t4 datetime NULL);');
@@ -123,6 +130,25 @@ describe("db", () => {
             }
         });
 
+        it("multi sql", () => {
+            assert.deepEqual(conn.execute('select 100 as n'), [{
+                n: 100
+            }]);
+
+            assert.deepEqual(conn.execute('select 100 as n;select 200 as n'), [
+                [{
+                    n: 100
+                }],
+                [{
+                    n: 200
+                }]
+            ]);
+
+            assert.deepEqual(conn.execute('select 100 as n;      '), [{
+                n: 100
+            }]);
+        });
+
         it("execute async", (done) => {
             conn.execute("select * from test where t1=?", 1123, (e, rs) => {
                 if (e)
@@ -172,7 +198,7 @@ describe("db", () => {
 
             it("begin/rollback", () => {
                 conn.begin();
-                conn.execute("update test set t2='test101.1' where t1=101");
+                conn.execute("update test set t2='test101.2' where t1=101");
                 conn.rollback();
 
                 var rs = conn.execute("select * from test where t1=101");
@@ -181,32 +207,36 @@ describe("db", () => {
 
             describe("trans()", () => {
                 it("auto commit", () => {
-                    conn.trans(function () {
+                    var res = conn.trans(function () {
                         assert.equal(this, conn);
                         this.execute("update test set t2='test101.2' where t1=101");
                     });
+                    assert.equal(res, true);
+
 
                     var rs = conn.execute("select * from test where t1=101");
                     assert.equal(rs[0].t2, "test101.2");
                 });
 
                 it("auto commit with fiber", () => {
-                    conn.trans(function () {
+                    var res = conn.trans(function () {
                         assert.equal(this, conn);
                         coroutine.parallel(() => {
                             this.execute("update test set t2='test101.2.1' where t1=101");
                         });
                     });
+                    assert.equal(res, true);
 
                     var rs = conn.execute("select * from test where t1=101");
                     assert.equal(rs[0].t2, "test101.2.1");
                 });
 
                 it("auto rollback", () => {
-                    conn.trans(function () {
+                    var res = conn.trans(function () {
                         this.execute("update test set t2='test101.3' where t1=101");
                         return false;
                     });
+                    assert.equal(res, false);
 
                     var rs = conn.execute("select * from test where t1=101");
                     assert.equal(rs[0].t2, "test101.2.1");

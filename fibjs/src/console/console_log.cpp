@@ -16,9 +16,26 @@ stream_logger* s_stream;
 #define MAX_LOGGER 10
 static logger* s_logs[MAX_LOGGER];
 
-void init_logger()
+class logger_initer {
+public:
+    logger_initer()
+    {
+        s_std = new std_logger;
+    }
+} s_logger_initer;
+
+result_t addLogger(logger* lgr)
 {
-    s_std = new std_logger;
+    int32_t n = 0;
+
+    for (n = 0; n < MAX_LOGGER && s_logs[n]; n++)
+        ;
+
+    if (n >= MAX_LOGGER)
+        return CHECK_ERROR(Runtime::setError("Too many items."));
+
+    s_logs[n] = lgr;
+    return 0;
 }
 
 void outLog(int32_t priority, exlib::string msg)
@@ -90,6 +107,9 @@ result_t console_base::set_loglevel(int32_t newVal)
 result_t console_base::add(exlib::string type)
 {
     Isolate* isolate = Isolate::current();
+    if (isolate->m_id > 1)
+        return CHECK_ERROR(CALL_E_INVALID_CALL);
+
     v8::Local<v8::Object> o = v8::Object::New(isolate->m_isolate);
 
     o->Set(isolate->NewString("type", 4), isolate->NewString(type));
@@ -98,16 +118,11 @@ result_t console_base::add(exlib::string type)
 
 result_t console_base::add(v8::Local<v8::Object> cfg)
 {
-    int32_t n = 0;
-
-    for (n = 0; n < MAX_LOGGER && s_logs[n]; n++)
-        ;
-
-    if (n >= MAX_LOGGER)
-        return CHECK_ERROR(Runtime::setError("Too many items."));
+    Isolate* isolate = Isolate::current();
+    if (isolate->m_id > 1)
+        return CHECK_ERROR(CALL_E_INVALID_CALL);
 
     v8::Local<v8::Value> type;
-    Isolate* isolate = Isolate::current();
 
     type = cfg->Get(isolate->NewString("type", 4));
     if (IsEmpty(type))
@@ -142,7 +157,9 @@ result_t console_base::add(v8::Local<v8::Object> cfg)
             return hr;
         }
 
-        s_logs[n] = lgr;
+        hr = addLogger(lgr);
+        if (hr < 0)
+            return hr;
     }
 
     return 0;
@@ -150,6 +167,10 @@ result_t console_base::add(v8::Local<v8::Object> cfg)
 
 result_t console_base::add(v8::Local<v8::Array> cfg)
 {
+    Isolate* isolate = Isolate::current();
+    if (isolate->m_id > 1)
+        return CHECK_ERROR(CALL_E_INVALID_CALL);
+
     int32_t sz = cfg->Length();
     int32_t i;
     result_t hr;
@@ -178,6 +199,10 @@ result_t console_base::add(v8::Local<v8::Array> cfg)
 
 result_t console_base::reset()
 {
+    Isolate* isolate = Isolate::current();
+    if (isolate->m_id > 1)
+        return CHECK_ERROR(CALL_E_INVALID_CALL);
+
     int32_t i;
 
     for (i = 0; i < MAX_LOGGER; i++) {

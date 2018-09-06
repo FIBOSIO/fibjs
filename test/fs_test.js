@@ -3,6 +3,7 @@ var coroutine = require('coroutine');
 var path = require('path');
 var fs = require('fs');
 var zip = require('zip');
+var io = require('io');
 
 test.setup();
 
@@ -12,7 +13,7 @@ var isWin32 = process.platform === 'win32';
 function unlink(pathname) {
     try {
         fs.rmdir(pathname);
-    } catch (e) { }
+    } catch (e) {}
 }
 
 var pathname = 'test_dir' + vmid;
@@ -30,7 +31,7 @@ describe('fs', () => {
     after(() => {
         try {
             fs.unlink(path.join(__dirname, 'unzip_test.zip'));
-        } catch (e) { }
+        } catch (e) {}
     });
 
     it("stat", () => {
@@ -328,23 +329,59 @@ describe('fs', () => {
         function save_zip(n) {
             var zipfile = zip.open(path.join(__dirname, 'unzip_test.zip'), "w");
             zipfile.write(new Buffer('test ' + n), 'test.txt');
+            zipfile.write(new Buffer(`module.exports = "fibjs-test-require-${n}"`), 'test.js');
             zipfile.close();
         }
 
-        function test_zip(n) {
+        function test_zip(n, first_test_n = n) {
             assert.equal(fs.readTextFile(path.join(__dirname, "unzip_test.zip$", "test.txt")),
+                "test " + n);
+            assert.equal(require('./unzip_test.zip$/test.js'), `fibjs-test-require-${first_test_n}`)
+        }
+
+        var first_test_n = 1;
+
+        save_zip(first_test_n);
+        coroutine.sleep(1000);
+        test_zip(first_test_n);
+
+        save_zip(2);
+        test_zip(1, first_test_n);
+
+        coroutine.sleep(4000);
+        test_zip(2, first_test_n);
+    });
+
+    it("zip data", () => {
+        function save_zip(n) {
+            var stream = new io.MemoryStream();
+            var zipfile = zip.open(stream, "w");
+            zipfile.write(new Buffer('test ' + n), 'test.txt');
+            zipfile.close();
+
+            stream.rewind();
+            fs.setZipFS("/unzip_test.zip", stream.readAll());
+        }
+
+        function test_zip(n) {
+            assert.equal(fs.readTextFile(path.join("/unzip_test.zip$", "test.txt")),
                 "test " + n);
         }
 
         save_zip(1);
-        coroutine.sleep(1000);
         test_zip(1);
 
         save_zip(2);
-        test_zip(1);
+        test_zip(2);
 
         coroutine.sleep(4000);
         test_zip(2);
+
+        fs.clearZipFS("/unzip_test.zip");
+
+        assert.throws(() => {
+            test_zip(2);
+        });
     });
 
     describe('read', () => {
@@ -649,8 +686,9 @@ describe('fs', () => {
         });
         var sz = fl.length;
         assert.greaterThan(sz, 3);
-        assert.equal(fl[sz - 2], 't1.js');
-        assert.equal(fl[sz - 1], 't2.js');
+        assert.equal(fl[sz - 3], 't1.js');
+        assert.equal(fl[sz - 2], 't2.js');
+        assert.equal(fl[sz - 1], 'test_refresh.js');
     });
 
     it("writeFile & appendFile", () => {

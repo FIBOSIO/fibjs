@@ -31,6 +31,7 @@ class http_base : public object_base {
 
 public:
     // http_base
+    static result_t get_STATUS_CODES(v8::Local<v8::Array>& retVal);
     static result_t get_cookies(obj_ptr<NArray>& retVal);
     static result_t get_timeout(int32_t& retVal);
     static result_t set_timeout(int32_t newVal);
@@ -38,10 +39,14 @@ public:
     static result_t set_enableCookie(bool newVal);
     static result_t get_autoRedirect(bool& retVal);
     static result_t set_autoRedirect(bool newVal);
-    virtual result_t get_maxBodySize(int32_t& retVal) = 0;
-    virtual result_t set_maxBodySize(int32_t newVal) = 0;
+    static result_t get_maxBodySize(int32_t& retVal);
+    static result_t set_maxBodySize(int32_t newVal);
     static result_t get_userAgent(exlib::string& retVal);
     static result_t set_userAgent(exlib::string newVal);
+    static result_t get_poolSize(int32_t& retVal);
+    static result_t set_poolSize(int32_t newVal);
+    static result_t get_poolTimeout(int32_t& retVal);
+    static result_t set_poolTimeout(int32_t newVal);
     static result_t fileHandler(exlib::string root, v8::Local<v8::Object> mimes, bool autoIndex, obj_ptr<Handler_base>& retVal);
     static result_t request(Stream_base* conn, HttpRequest_base* req, obj_ptr<HttpResponse_base>& retVal, AsyncEvent* ac);
     static result_t request(exlib::string method, exlib::string url, v8::Local<v8::Object> opts, obj_ptr<HttpResponse_base>& retVal, AsyncEvent* ac);
@@ -63,6 +68,7 @@ public:
     }
 
 public:
+    static void s_get_STATUS_CODES(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args);
     static void s_get_cookies(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args);
     static void s_get_timeout(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args);
     static void s_set_timeout(v8::Local<v8::Name> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& args);
@@ -74,6 +80,10 @@ public:
     static void s_set_maxBodySize(v8::Local<v8::Name> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& args);
     static void s_get_userAgent(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args);
     static void s_set_userAgent(v8::Local<v8::Name> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& args);
+    static void s_get_poolSize(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args);
+    static void s_set_poolSize(v8::Local<v8::Name> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& args);
+    static void s_get_poolTimeout(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args);
+    static void s_set_poolTimeout(v8::Local<v8::Name> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& args);
     static void s_fileHandler(const v8::FunctionCallbackInfo<v8::Value>& args);
     static void s_request(const v8::FunctionCallbackInfo<v8::Value>& args);
     static void s_get(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -133,12 +143,15 @@ inline ClassInfo& http_base::class_info()
     };
 
     static ClassData::ClassProperty s_property[] = {
+        { "STATUS_CODES", s_get_STATUS_CODES, block_set, true },
         { "cookies", s_get_cookies, block_set, true },
         { "timeout", s_get_timeout, s_set_timeout, true },
         { "enableCookie", s_get_enableCookie, s_set_enableCookie, true },
         { "autoRedirect", s_get_autoRedirect, s_set_autoRedirect, true },
-        { "maxBodySize", s_get_maxBodySize, s_set_maxBodySize, false },
-        { "userAgent", s_get_userAgent, s_set_userAgent, true }
+        { "maxBodySize", s_get_maxBodySize, s_set_maxBodySize, true },
+        { "userAgent", s_get_userAgent, s_set_userAgent, true },
+        { "poolSize", s_get_poolSize, s_set_poolSize, true },
+        { "poolTimeout", s_get_poolTimeout, s_set_poolTimeout, true }
     };
 
     static ClassData s_cd = {
@@ -149,6 +162,18 @@ inline ClassInfo& http_base::class_info()
 
     static ClassInfo s_ci(s_cd);
     return s_ci;
+}
+
+inline void http_base::s_get_STATUS_CODES(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args)
+{
+    v8::Local<v8::Array> vr;
+
+    METHOD_NAME("http.STATUS_CODES");
+    PROPERTY_ENTER();
+
+    hr = get_STATUS_CODES(vr);
+
+    METHOD_RETURN();
 }
 
 inline void http_base::s_get_cookies(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args)
@@ -237,10 +262,9 @@ inline void http_base::s_get_maxBodySize(v8::Local<v8::Name> property, const v8:
     int32_t vr;
 
     METHOD_NAME("http.maxBodySize");
-    METHOD_INSTANCE(http_base);
     PROPERTY_ENTER();
 
-    hr = pInst->get_maxBodySize(vr);
+    hr = get_maxBodySize(vr);
 
     METHOD_RETURN();
 }
@@ -248,11 +272,10 @@ inline void http_base::s_get_maxBodySize(v8::Local<v8::Name> property, const v8:
 inline void http_base::s_set_maxBodySize(v8::Local<v8::Name> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& args)
 {
     METHOD_NAME("http.maxBodySize");
-    METHOD_INSTANCE(http_base);
     PROPERTY_ENTER();
     PROPERTY_VAL(int32_t);
 
-    hr = pInst->set_maxBodySize(v0);
+    hr = set_maxBodySize(v0);
 
     PROPERTY_SET_LEAVE();
 }
@@ -276,6 +299,52 @@ inline void http_base::s_set_userAgent(v8::Local<v8::Name> property, v8::Local<v
     PROPERTY_VAL(exlib::string);
 
     hr = set_userAgent(v0);
+
+    PROPERTY_SET_LEAVE();
+}
+
+inline void http_base::s_get_poolSize(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args)
+{
+    int32_t vr;
+
+    METHOD_NAME("http.poolSize");
+    PROPERTY_ENTER();
+
+    hr = get_poolSize(vr);
+
+    METHOD_RETURN();
+}
+
+inline void http_base::s_set_poolSize(v8::Local<v8::Name> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& args)
+{
+    METHOD_NAME("http.poolSize");
+    PROPERTY_ENTER();
+    PROPERTY_VAL(int32_t);
+
+    hr = set_poolSize(v0);
+
+    PROPERTY_SET_LEAVE();
+}
+
+inline void http_base::s_get_poolTimeout(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& args)
+{
+    int32_t vr;
+
+    METHOD_NAME("http.poolTimeout");
+    PROPERTY_ENTER();
+
+    hr = get_poolTimeout(vr);
+
+    METHOD_RETURN();
+}
+
+inline void http_base::s_set_poolTimeout(v8::Local<v8::Name> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& args)
+{
+    METHOD_NAME("http.poolTimeout");
+    PROPERTY_ENTER();
+    PROPERTY_VAL(int32_t);
+
+    hr = set_poolTimeout(v0);
 
     PROPERTY_SET_LEAVE();
 }

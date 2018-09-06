@@ -10,6 +10,7 @@
 
 namespace fibjs {
 
+v8::Local<v8::BigInt> BigInt_New(v8::Isolate* isolate, uint64_t value);
 void InvokeApiInterruptCallbacks(v8::Isolate* isolate);
 
 struct V8FrameInfo {
@@ -25,6 +26,8 @@ exlib::string traceInfo(v8::Isolate* isolate, int32_t deep);
 void beginCoverage(v8::Isolate* isolate);
 void pauseCoverage(v8::Isolate* isolate);
 void WriteLcovData(v8::Isolate* isolate, FILE* file);
+
+bool isFrozen(v8::Handle<v8::Object> object);
 
 } /* namespace fibjs */
 

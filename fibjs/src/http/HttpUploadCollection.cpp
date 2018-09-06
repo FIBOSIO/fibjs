@@ -172,12 +172,15 @@ void HttpUploadCollection::parse(exlib::string& str, const char* boundary)
         p1 = szQueryString;
         szQueryString = p + uiSplitSize;
 
-        p--;
-        ch = *p;
-        if (ch != '\n')
-            return;
-        if (*(p - 1) == '\r')
+        if (p > p1) {
             p--;
+            ch = *p;
+            if (ch != '\n')
+                return;
+
+            if (p > p1 && *(p - 1) == '\r')
+                p--;
+        }
 
         if (!strName.empty()) {
             int32_t uiSize = (int32_t)(p - p1);
@@ -217,7 +220,7 @@ result_t HttpUploadCollection::has(exlib::string name, bool& retVal)
 
     retVal = false;
     for (i = 0; i < m_count; i++)
-        if (!qstricmp(m_names[i].c_str(), name.c_str())) {
+        if (!qstricmp(m_map[i].first.c_str(), name.c_str())) {
             retVal = true;
             break;
         }
@@ -230,10 +233,14 @@ result_t HttpUploadCollection::first(exlib::string name, Variant& retVal)
     int32_t i;
 
     for (i = 0; i < m_count; i++)
-        if (!qstricmp(m_names[i].c_str(), name.c_str())) {
-            retVal = m_values[i];
+    {
+        pair &_pair = m_map[i];
+
+        if (!qstricmp(_pair.first.c_str(), name.c_str())) {
+            retVal = _pair.second;
             return 0;
         }
+    }
 
     return CALL_RETURN_NULL;
 }
@@ -246,8 +253,12 @@ result_t HttpUploadCollection::all(exlib::string name, obj_ptr<NArray>& retVal)
     list = new NArray();
 
     for (i = 0; i < m_count; i++)
-        if (!qstricmp(m_names[i].c_str(), name.c_str()))
-            list->append(m_values[i]);
+    {
+        pair &_pair = m_map[i];
+
+        if (!qstricmp(_pair.first.c_str(), name.c_str()))
+            list->append(_pair.second);
+    }
 
     retVal = list;
     return 0;
@@ -255,8 +266,7 @@ result_t HttpUploadCollection::all(exlib::string name, obj_ptr<NArray>& retVal)
 
 result_t HttpUploadCollection::add(exlib::string name, Variant value)
 {
-    m_names[m_count] = name;
-    m_values[m_count] = value;
+    m_map[m_count] = pair(name, value);
     m_count++;
 
     return 0;
@@ -282,24 +292,30 @@ result_t HttpUploadCollection::set(exlib::string name, Variant value)
     bool bFound = false;
 
     for (i = 0; i < m_count; i++)
-        if (!qstricmp(m_names[i].c_str(), name.c_str())) {
-            m_values[i] = value;
+    {
+        pair &_pair = m_map[i];
+
+        if (!qstricmp(_pair.first.c_str(), name.c_str())) {
+            _pair.second = value;
             bFound = true;
             break;
         }
+    }
 
     if (bFound) {
         int32_t p = ++i;
 
         for (; i < m_count; i++)
-            if (qstricmp(m_names[i].c_str(), name.c_str())) {
-                if (i != p) {
-                    m_names[p] = m_names[i];
-                    m_values[p] = m_values[i];
-                }
+        {
+            pair &_pair = m_map[i];
+
+            if (qstricmp(_pair.first.c_str(), name.c_str())) {
+                if (i != p)
+                    m_map[p] = _pair;
 
                 p++;
             }
+        }
 
         m_count = p;
     } else
@@ -328,14 +344,16 @@ result_t HttpUploadCollection::remove(exlib::string name)
     int32_t p = 0;
 
     for (i = 0; i < m_count; i++)
-        if (qstricmp(m_names[i].c_str(), name.c_str())) {
-            if (i != p) {
-                m_names[p] = m_names[i];
-                m_values[p] = m_values[i];
-            }
+    {
+        pair &_pair = m_map[i];
+
+        if (qstricmp(_pair.first.c_str(), name.c_str())) {
+            if (i != p)
+                m_map[p] = _pair;
 
             p++;
         }
+    }
 
     m_count = p;
 
@@ -355,7 +373,7 @@ result_t HttpUploadCollection::_named_enumerator(v8::Local<v8::Array>& retVal)
 
     retVal = v8::Array::New(isolate->m_isolate);
     for (i = 0; i < m_count; i++)
-        retVal->Set(i, isolate->NewString(m_names[i]));
+        retVal->Set(i, isolate->NewString(m_map[i].first));
 
     return 0;
 }

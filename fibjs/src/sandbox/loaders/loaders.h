@@ -20,8 +20,8 @@ public:
     }
 
 public:
-    virtual result_t run(SandBox::Context* ctx, Buffer_base* src, exlib::string name,
-        exlib::string arg_names, v8::Local<v8::Value>* args, int32_t args_count);
+    virtual result_t compile(SandBox::Context* ctx, Buffer_base* src, exlib::string name,
+        exlib::string arg_names, v8::Local<v8::Script>& script);
 };
 
 class JscLoader : public SandBox::ExtLoader {
@@ -32,8 +32,8 @@ public:
     }
 
 public:
-    virtual result_t run(SandBox::Context* ctx, Buffer_base* src, exlib::string name,
-        exlib::string arg_names, v8::Local<v8::Value>* args, int32_t args_count);
+    virtual result_t compile(SandBox::Context* ctx, Buffer_base* src, exlib::string name,
+        exlib::string arg_names, v8::Local<v8::Script>& script);
 };
 
 class JsonLoader : public SandBox::ExtLoader {
@@ -44,8 +44,21 @@ public:
     }
 
 public:
-    virtual result_t run_module(SandBox::Context* ctx, Buffer_base* src,
-        exlib::string name, v8::Local<v8::Object> module, v8::Local<v8::Object> exports);
+    virtual result_t run(SandBox::Context* ctx, Buffer_base* src, exlib::string name,
+        exlib::string arg_names, std::vector<v8::Local<v8::Value>>& args);
+};
+
+class CustomExtLoader : public JsLoader {
+public:
+    CustomExtLoader(exlib::string extname)
+        : JsLoader()
+    {
+        m_ext = extname;
+    }
+
+public:
+    virtual result_t compile(SandBox::Context* ctx, Buffer_base* src, exlib::string name,
+        exlib::string arg_names, v8::Local<v8::Script>& script);
 };
 
 } /* namespace fibjs */

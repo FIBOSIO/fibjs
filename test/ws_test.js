@@ -6,6 +6,7 @@ var io = require('io');
 var http = require('http');
 var mq = require('mq');
 var coroutine = require('coroutine');
+var test_util = require('./test_util');
 
 var base_port = coroutine.vmid * 10000;
 
@@ -484,7 +485,10 @@ describe('ws', () => {
                             msg.stream.close();
                         else if (msg.data === "close")
                             this.close(3000, "remote");
-                        else
+                        else if (msg.data === "many") {
+                            for (var i = 0; i < 1025; i++)
+                                s.send(new Buffer(1024 * 64));
+                        } else
                             this.send(msg.data);
                     };
                 })
@@ -553,6 +557,32 @@ describe('ws', () => {
             assert.equal(msg.data.toString(), '456');
 
             s.close();
+        });
+
+        it('many compressed message', () => {
+            var cnt = 0;
+            var sz = 0;
+            var msg;
+            var s = new ws.Socket("ws://127.0.0.1:" + (8814 + base_port) + "/ws", "test");
+            s.onopen = () => {
+                s.send('many');
+            };
+
+            s.onmessage = m => {
+                cnt++;
+                sz += m.data.length;
+            };
+
+            s.onerror = e => {
+                console.error(e);
+            };
+
+            for (var i = 0; i < 1000 && cnt < 1025; i++)
+                coroutine.sleep(1);
+
+            s.close();
+
+            assert.equal(sz, 1024 * 1025 * 64);
         });
 
         it('send/on("message")', () => {
@@ -763,6 +793,81 @@ describe('ws', () => {
             });
         });
 
+        describe('gc', () => {
+            it("gc on close", () => {
+                var t = false;
+                GC();
+
+                var no1 = test_util.countObject('WebSocket');
+                var httpd = new http.Server(8816 + base_port, {
+                    "/ws": ws.upgrade((s, req) => {
+                        s.onmessage = e => {}
+                    })
+                });
+
+                ss.push(httpd.socket);
+                httpd.run(() => {});
+
+                assert.equal(test_util.countObject('WebSocket'), no1);
+
+                var s = new ws.Socket("ws://127.0.0.1:" + (8816 + base_port) + "/ws", "test");
+
+                s.onopen = () => {
+                    t = true;
+                };
+
+                s.onmessage = e => {}
+
+                for (var i = 0; i < 1000 && !t; i++)
+                    coroutine.sleep(1);
+
+                assert.equal(test_util.countObject('WebSocket'), no1 + 2);
+
+                s.close();
+                s = undefined;
+                GC();
+                coroutine.sleep(10);
+                GC();
+                assert.equal(test_util.countObject('WebSocket'), no1);
+            });
+
+            it("not gc in closure", () => {
+                var t = false;
+                GC();
+
+                var no1 = test_util.countObject('WebSocket');
+                var httpd = new http.Server(8817 + base_port, {
+                    "/ws": ws.upgrade((s, req) => {
+                        ss.push(s);
+                        s.send(new Date());
+                    })
+                });
+
+                ss.push(httpd.socket);
+                httpd.run(() => {});
+
+                GC();
+                assert.equal(test_util.countObject('WebSocket'), no1);
+
+                function test() {
+                    var s = new ws.Socket("ws://127.0.0.1:" + (8817 + base_port) + "/ws", "test");
+                    s.onmessage = e => {
+                        t = true;
+                        s.close();
+                    }
+                }
+
+                test();
+                GC();
+
+                coroutine.sleep(10);
+                assert.equal(test_util.countObject('WebSocket'), no1 + 2);
+                assert.isTrue(t);
+
+                GC();
+                assert.equal(test_util.countObject('WebSocket'), no1 + 1);
+            });
+        });
     });
 });
 

@@ -155,14 +155,16 @@ typedef int32_t result_t;
 #define CALL_E_GUICALL (CALL_E_MAX - 19)
 // Internal error.
 #define CALL_E_INTERNAL (CALL_E_MAX - 20)
+// The maximum amount of time for a script to execute was exceeded.
+#define CALL_E_TIMEOUT (CALL_E_MAX - 21)
 // Invalid return type.
-#define CALL_E_RETURN_TYPE (CALL_E_MAX - 21)
+#define CALL_E_RETURN_TYPE (CALL_E_MAX - 22)
 // Exception occurred.
-#define CALL_E_EXCEPTION (CALL_E_MAX - 22)
-// Javascript error.
-#define CALL_E_JAVASCRIPT (CALL_E_MAX - 23)
+#define CALL_E_EXCEPTION (CALL_E_MAX - 23)
+// JavaScript error.
+#define CALL_E_JAVASCRIPT (CALL_E_MAX - 24)
 // Permission denied
-#define CALL_E_PERMIT (CALL_E_MAX - 24)
+#define CALL_E_PERMIT (CALL_E_MAX - 25)
 
 #define CALL_E_MIN -100100
 
@@ -380,20 +382,28 @@ public:                                       \
         {                                         \
             return name##_base::class_info();     \
         }                                         \
-    } s_RootModule_##name;
+    };                                            \
+    static RootModule_##name s_RootModule_##name; \
+    RootModule* Module_##name = &s_RootModule_##name;
 
-#define DECLARE_MODULE_EX(mname, module)           \
-    class RootModule_##mname : public RootModule { \
-    public:                                        \
-        virtual ClassInfo& class_info()            \
-        {                                          \
-            return module##_base::class_info();    \
-        }                                          \
-        virtual const char* name()                 \
-        {                                          \
-            return #mname;                         \
-        }                                          \
-    } s_RootModule_##mname;
+#define DECLARE_MODULE_EX(mname, module)            \
+    class RootModule_##mname : public RootModule {  \
+    public:                                         \
+        virtual ClassInfo& class_info()             \
+        {                                           \
+            return module##_base::class_info();     \
+        }                                           \
+        virtual const char* name()                  \
+        {                                           \
+            return #mname;                          \
+        }                                           \
+    };                                              \
+    static RootModule_##mname s_RootModule_##mname; \
+    RootModule* Module_##mname = &s_RootModule_##mname;
+
+#define IMPORT_MODULE(name)           \
+    extern RootModule* Module_##name; \
+    Module_##name->install();
 
 #define EVENT_SUPPORT()                                                                    \
 public:                                                                                    \
@@ -669,13 +679,25 @@ class OptArgs {
 public:
     OptArgs(const v8::FunctionCallbackInfo<v8::Value>& args, int32_t base, int32_t argc)
         : m_args(&args)
+        , m_argv(NULL)
         , m_base(base)
         , m_argc(argc)
+    {
+        if (m_base > m_argc)
+            m_base = m_argc;
+    }
+
+    OptArgs(const std::vector<v8::Local<v8::Value>>& argv)
+        : m_args(NULL)
+        , m_argv(&argv)
+        , m_base(0)
+        , m_argc((int32_t)argv.size())
     {
     }
 
     OptArgs(const OptArgs& a)
         : m_args(a.m_args)
+        , m_argv(a.m_argv)
         , m_base(a.m_base)
         , m_argc(a.m_argc)
     {
@@ -683,6 +705,7 @@ public:
 
     OptArgs()
         : m_args(NULL)
+        , m_argv(NULL)
         , m_base(0)
         , m_argc(0)
     {
@@ -695,11 +718,21 @@ public:
 
     v8::Local<v8::Value> operator[](int32_t i) const
     {
+        if (m_argv)
+            return (*m_argv)[i];
+
         return (*m_args)[i + m_base];
     }
 
     void GetData(std::vector<v8::Local<v8::Value>>& datas)
     {
+        if (m_argv) {
+            datas.resize(m_argc);
+            for (int32_t i = 0; i < m_argc; i++)
+                datas[i] = (*m_argv)[i];
+            return;
+        }
+
         datas.resize(m_argc - m_base);
         for (int32_t i = 0; i < m_argc - m_base; i++)
             datas[i] = (*m_args)[m_base + i];
@@ -707,6 +740,7 @@ public:
 
 private:
     const v8::FunctionCallbackInfo<v8::Value>* m_args;
+    const std::vector<v8::Local<v8::Value>>* m_argv;
     int32_t m_base;
     int32_t m_argc;
 };
@@ -1217,7 +1251,7 @@ inline result_t _error_checker(result_t hr, const char* file, int32_t line)
 }
 
 #ifndef NDEBUG
-#define CHECK_ERROR(hr) _error_checker((hr), __FILE__, __LINE__)
+#define CHECK_ERROR(hr) fibjs::_error_checker((hr), __FILE__, __LINE__)
 #else
 #define CHECK_ERROR(hr) (hr)
 #endif

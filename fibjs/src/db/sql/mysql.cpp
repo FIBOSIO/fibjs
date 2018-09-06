@@ -290,9 +290,9 @@ result_t mysql::rollback(AsyncEvent* ac)
     return execute("ROLLBACK", 8, retVal);
 }
 
-result_t mysql::trans(v8::Local<v8::Function> func)
+result_t mysql::trans(v8::Local<v8::Function> func, bool& retVal)
 {
-    return _trans(this, func);
+    return _trans(this, func, retVal);
 }
 
 result_t mysql::execute(const char* sql, int32_t sLen,
@@ -305,21 +305,26 @@ result_t mysql::execute(const char* sql, int32_t sLen,
     if (!res)
         return CHECK_ERROR(error());
 
-    retVal = res;
-    res->Unref();
+    if (UMConnection_HasMoreResult(m_conn)) {
+        retVal = new NArray();
+
+        retVal->append(res);
+        res->Unref();
+
+        while (UMConnection_HasMoreResult(m_conn)) {
+            res = (DBResult*)UMConnection_NextResultSet(m_conn);
+            if (!res)
+                return CHECK_ERROR(error());
+
+            retVal->append(res);
+            res->Unref();
+        }
+    } else {
+        retVal = res;
+        res->Unref();
+    }
 
     return 0;
-}
-
-result_t mysql::execute(exlib::string sql, obj_ptr<NArray>& retVal, AsyncEvent* ac)
-{
-    if (!m_conn)
-        return CHECK_ERROR(CALL_E_INVALID_CALL);
-
-    if (ac->isSync())
-        return CHECK_ERROR(CALL_E_NOSYNC);
-
-    return execute(sql.c_str(), (int32_t)sql.length(), retVal);
 }
 
 result_t mysql::execute(exlib::string sql, OptArgs args, obj_ptr<NArray>& retVal,
@@ -341,7 +346,7 @@ result_t mysql::execute(exlib::string sql, OptArgs args, obj_ptr<NArray>& retVal
     }
 
     exlib::string str = ac->m_ctx[0].string();
-    return execute(str, retVal, ac);
+    return execute(str.c_str(), (int32_t)str.length(), retVal);
 }
 
 result_t mysql::format(exlib::string sql, OptArgs args,

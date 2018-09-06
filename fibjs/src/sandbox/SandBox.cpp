@@ -59,21 +59,22 @@ result_t SandBox_base::_new(v8::Local<v8::Object> mods, v8::Local<v8::Function> 
     return 0;
 }
 
-SandBox::SandBox()
+SandBox::SandBox(bool extLoader)
 {
     obj_ptr<ExtLoader> loader;
 
     loader = new JsLoader();
     m_loaders.push_back(loader);
 
-    loader = new JscLoader();
-    m_loaders.push_back(loader);
+    if (extLoader) {
+        loader = new JscLoader();
+        m_loaders.push_back(loader);
+    }
 
     loader = new JsonLoader();
     m_loaders.push_back(loader);
 
     m_global = false;
-    m_init = false;
 }
 
 void SandBox::initGlobal(v8::Local<v8::Object> global)
@@ -111,12 +112,7 @@ RootModule* RootModule::g_root = NULL;
 
 void SandBox::initRoot()
 {
-    m_init = true;
-
     Isolate* isolate = holder();
-
-    if (g_cov && isolate->m_id == 1)
-        pauseCoverage(isolate->m_isolate);
 
     RootModule* pModule = RootModule::g_root;
 
@@ -130,14 +126,6 @@ void SandBox::initRoot()
 
     v8::Local<v8::Object> _buffer = Buffer_base::class_info().getModule(isolate);
     _buffer->Set(isolate->NewString("Buffer"), _buffer);
-
-    v8::Local<v8::Value> m;
-    run_module("stream.js", "/", m);
-
-    m_init = false;
-
-    if (g_cov && isolate->m_id == 1)
-        beginCoverage(isolate->m_isolate);
 }
 
 result_t SandBox::add(exlib::string id, v8::Local<v8::Value> mod)
@@ -178,6 +166,17 @@ result_t SandBox::remove(exlib::string id)
     return 0;
 }
 
+result_t SandBox::has(exlib::string id, bool& retVal)
+{
+    path_base::normalize(id, id);
+    retVal = mods()->Has(
+                       Isolate::current()->context(),
+                       holder()->NewString(id))
+                 .ToChecked();
+
+    return 0;
+}
+
 result_t SandBox::clone(obj_ptr<SandBox_base>& retVal)
 {
     obj_ptr<SandBox> sbox = new SandBox();
@@ -188,12 +187,65 @@ result_t SandBox::clone(obj_ptr<SandBox_base>& retVal)
     return 0;
 }
 
+result_t deepFreeze(v8::Local<v8::Value> v)
+{
+    if (v.IsEmpty() || !v->IsObject())
+        return 0;
+
+    v8::Local<v8::Object> obj = v8::Local<v8::Object>::Cast(v);
+
+    if (!isFrozen(obj)) {
+        obj->SetIntegrityLevel(obj->CreationContext(), v8::IntegrityLevel::kFrozen).ToChecked();
+        v8::Local<v8::Array> names = obj->GetPropertyNames(obj->CreationContext(), v8::KeyCollectionMode::kIncludePrototypes,
+                                            v8::ALL_PROPERTIES, v8::IndexFilter::kIncludeIndices)
+                                         .ToLocalChecked();
+
+        TryCatch try_catch;
+        for (int32_t i = 0; i < names->Length(); i++)
+            deepFreeze(obj->Get(names->Get(i)));
+    }
+
+    return 0;
+}
+
+result_t SandBox::freeze()
+{
+    v8::Local<v8::Object> global;
+    result_t hr;
+
+    hr = get_global(global);
+    if (hr < 0)
+        return hr;
+
+    deepFreeze(global);
+
+    return 0;
+}
+
 result_t SandBox::get_global(v8::Local<v8::Object>& retVal)
 {
     if (!m_global)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
     retVal = v8::Local<v8::Object>::Cast(GetPrivate("_global"));
+    return 0;
+}
+
+result_t SandBox::get_modules(v8::Local<v8::Object>& retVal)
+{
+    Isolate* isolate = holder();
+
+    retVal = v8::Object::New(isolate->m_isolate);
+
+    v8::Local<v8::Object> ms = mods();
+    v8::Local<v8::Array> ks = ms->GetPropertyNames();
+
+    v8::Local<v8::String> mgetter = isolate->NewString("exports");
+    for (int32_t i = 0, len = ks->Length(); i < len; i++) {
+        v8::Local<v8::Value> k = ks->Get(i);
+        retVal->Set(k, ms->Get(k)->ToObject()->Get(mgetter));
+    }
+
     return 0;
 }
 

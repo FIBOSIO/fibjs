@@ -9,18 +9,19 @@
 #include "path.h"
 #include "SandBox.h"
 #include "ifs/zlib.h"
+#include "ifs/util.h"
 #include "loaders.h"
 #include "version.h"
 
 namespace fibjs {
 
-result_t JscLoader::run(SandBox::Context* ctx, Buffer_base* src, exlib::string name,
-    exlib::string arg_names, v8::Local<v8::Value>* args, int32_t args_count)
+result_t JscLoader::compile(SandBox::Context* ctx, Buffer_base* src, exlib::string name,
+    exlib::string arg_names, v8::Local<v8::Script>& script)
 {
     result_t hr;
 
     obj_ptr<Buffer_base> unz;
-    hr = zlib_base::cc_gunzip(src, unz);
+    hr = zlib_base::cc_gunzip(src, -1, unz);
     if (hr < 0)
         return hr;
 
@@ -65,7 +66,7 @@ result_t JscLoader::run(SandBox::Context* ctx, Buffer_base* src, exlib::string n
         pos++;
     }
 
-    v8::MaybeLocal<v8::Script> script;
+    v8::MaybeLocal<v8::Script> mayscript;
     {
         TryCatch try_catch;
 
@@ -75,23 +76,14 @@ result_t JscLoader::run(SandBox::Context* ctx, Buffer_base* src, exlib::string n
         v8::ScriptCompiler::Source source(isolate->NewString(s_temp_source),
             v8::ScriptOrigin(soname), cache);
 
-        script = v8::ScriptCompiler::Compile(isolate->context(), &source,
+        mayscript = v8::ScriptCompiler::Compile(isolate->context(), &source,
             v8::ScriptCompiler::kConsumeCodeCache);
 
-        if (script.IsEmpty())
+        if (mayscript.IsEmpty())
             return throwSyntaxError(try_catch);
     }
 
-    v8::Local<v8::Value> v = script.ToLocalChecked()->Run();
-    if (v.IsEmpty())
-        return CALL_E_JAVASCRIPT;
-
-    args[0] = soname;
-    args[1] = isolate->NewString(pname);
-    v8::Local<v8::Object> glob = isolate->context()->Global();
-    v = v8::Local<v8::Function>::Cast(v)->Call(glob, args_count, args);
-    if (v.IsEmpty())
-        return CALL_E_JAVASCRIPT;
+    script = mayscript.ToLocalChecked();
 
     return 0;
 }

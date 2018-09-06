@@ -19,11 +19,14 @@ namespace fibjs {
 int32_t g_spareFibers;
 static int32_t g_tlsCurrent;
 
-void init_fiber()
-{
-    g_spareFibers = MAX_IDLE;
-    g_tlsCurrent = exlib::Fiber::tlsAlloc();
-}
+class fiber_initer {
+public:
+    fiber_initer()
+    {
+        g_spareFibers = MAX_IDLE;
+        g_tlsCurrent = exlib::Fiber::tlsAlloc();
+    }
+} s_fiber_initer;
 
 void JSFiber::fiber_proc(void* p)
 {
@@ -132,6 +135,9 @@ save_method_name::save_method_name(const char* name)
 save_method_name::~save_method_name()
 {
     m_fb->m_native_name = m_name;
+
+    if (m_fb->m_termed && !m_fb->holder()->m_isolate->IsExecutionTerminating())
+        m_fb->holder()->m_isolate->TerminateExecution();
 }
 
 result_t JSFiber::get_id(int64_t& retVal)
@@ -220,6 +226,8 @@ JSFiber::scope::scope(JSFiber* fb)
 
 JSFiber::scope::~scope()
 {
+    m_pFiber->holder()->m_isolate->RunMicrotasks();
+
     m_pFiber->m_quit.set();
 
     ReportException(try_catch, m_hr);

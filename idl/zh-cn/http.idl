@@ -1,5 +1,5 @@
 
-/*! @brief 超文本传输协议模块，用以支持 http 协议处理 */
+/*! @brief 超文本传输协议模块，用以支持 http 协议处理，模块别名：https */
 module http
 {
     /*! @brief 创建一个 http 请求对象，参见 HttpRequest */
@@ -23,6 +23,9 @@ module http
     /*! @brief 创建一个 http 协议处理器对象，参见 HttpHandler */
     static HttpHandler new Handler();
 
+    /*! @brief 返回标准的 HTTP 响应状态码的集合，以及各自的简短描述。 */
+    static readonly Array STATUS_CODES;
+
     /*! @brief 返回http客户端的 HttpCookie 对象列表 */
     static readonly NArray cookies;
 
@@ -36,10 +39,16 @@ module http
     static Boolean autoRedirect;
 
     /*! @brief 查询和设置 body 最大尺寸，以 MB 为单位，缺省为 -1，不限制尺寸 */
-    Integer maxBodySize;
+    static Integer maxBodySize;
 
     /*! @brief 查询和设置 http 请求中的浏览器标识 */
     static String userAgent;
+
+    /*! @brief 查询和设置 keep-alive 最大缓存连接数，缺省 128 */
+    static Integer poolSize;
+
+    /*! @brief 查询和设置 keep-alive 缓存连接超时时间，缺省 10000 ms */
+    static Integer poolTimeout;
 
     /*! @brief 创建一个 http 静态文件处理器，用以用静态文件响应 http 消息
 

@@ -486,6 +486,30 @@ describe('util', () => {
         util.clone(new Map());
     });
 
+    it('deepFreeze', () => {
+        var o = {
+            a: {
+                b: 100
+            },
+            b: [200]
+        };
+
+        util.deepFreeze(o);
+        o.c = 200;
+        o.a.c = 300;
+
+        assert.throws(() => {
+            o.b.push(400);
+        })
+
+        assert.deepEqual(o, {
+            a: {
+                b: 100
+            },
+            b: [200]
+        });
+    });
+
     it('extend', () => {
         var result;
         assert.equal(util.extend({}, {
@@ -1235,6 +1259,86 @@ describe('util', () => {
 
             assert.throws(() => {
                 util.sync(async_test1, true)(100, 200);
+            });
+        });
+    });
+
+    describe('buildInfo', () => {
+        it('properties', () => {
+            assert.property(util.buildInfo(), 'fibjs');
+            switch (process.platform) {
+                case 'win32':
+                    assert.property(util.buildInfo(), 'msvc');
+                    break
+                case 'darwin':
+                    assert.property(util.buildInfo(), 'clang');
+                    break
+                case 'freebsd':
+                case 'linux':
+                    assert.property(util.buildInfo(), 'gcc');
+                    break
+            }
+            // git
+            assert.property(util.buildInfo(), 'date');
+            // debug
+            assert.property(util.buildInfo(), 'vender');
+            assert.property(util.buildInfo(), 'modules');
+        });
+
+        it('modules', () => {
+            const modules = util.buildInfo().modules;
+
+            // built-in modules
+            ;
+            [
+                "zmq",
+                "zlib",
+                "zip",
+                "xml",
+                "ws",
+                "vm",
+                "uuid",
+                "util",
+                "url",
+                "tty",
+                "timers",
+                "test",
+                "string_decoder",
+                "tls",
+                "ssl",
+                "querystring",
+                "punycode",
+                "profiler",
+                "process",
+                "path",
+                "os",
+                "net",
+                "mq",
+                "json",
+                "io",
+                "iconv",
+                "https",
+                "http",
+                "hex",
+                "hash",
+                "gd",
+                "fs",
+                "events",
+                "encoding",
+                "dns",
+                "dgram",
+                "db",
+                "crypto",
+                "coroutine",
+                "buffer",
+                "bson",
+                "base64vlq",
+                "base64",
+                "base32",
+                "assert"
+            ].forEach(moduleName => {
+                assert.isTrue(modules.includes(moduleName))
+                assert.isObject(require(moduleName))
             });
         });
     });

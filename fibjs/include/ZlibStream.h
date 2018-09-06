@@ -61,8 +61,14 @@ private:
             if (pThis->m_pThis->strm.avail_in == 0 && pThis->m_flush == Z_NO_FLUSH)
                 return pThis->done();
 
-            pThis->m_buffer = new Buffer((const char*)pThis->m_pThis->m_outBuffer,
-                ZLIB_CHUNK - pThis->m_pThis->strm.avail_out);
+            int32_t size = ZLIB_CHUNK - pThis->m_pThis->strm.avail_out;
+            if (pThis->m_pThis->m_maxSize >= 0) {
+                if (size > pThis->m_pThis->m_maxSize - pThis->m_pThis->m_dataSize)
+                    return CALL_E_OVERFLOW;
+                pThis->m_pThis->m_dataSize += size;
+            }
+
+            pThis->m_buffer = new Buffer((const char*)pThis->m_pThis->m_outBuffer, size);
             pThis->m_pThis->resetBuffer();
             return pThis->m_stm->write(pThis->m_buffer, pThis);
         }
@@ -76,8 +82,10 @@ private:
     };
 
 public:
-    ZlibStream(Stream_base* stm)
+    ZlibStream(Stream_base* stm, int32_t maxSize = -1)
         : m_stm(stm)
+        , m_maxSize(maxSize)
+        , m_dataSize(0)
     {
         strm.zalloc = Z_NULL;
         strm.zfree = Z_NULL;
@@ -96,6 +104,7 @@ public:
     void attach(Stream_base* stm)
     {
         m_stm = stm;
+        m_dataSize = 0;
     }
 
 public:
@@ -259,6 +268,8 @@ public:
 protected:
     z_stream strm;
     obj_ptr<Stream_base> m_stm;
+    int32_t m_maxSize;
+    int32_t m_dataSize;
     unsigned char m_outBuffer[ZLIB_CHUNK];
 };
 
@@ -284,8 +295,8 @@ public:
 
 class inf_base : public ZlibStream {
 public:
-    inf_base(Stream_base* stm)
-        : ZlibStream(stm)
+    inf_base(Stream_base* stm, int32_t maxSize)
+        : ZlibStream(stm, maxSize)
     {
     }
 
@@ -316,8 +327,8 @@ public:
 
 class inf : public inf_base {
 public:
-    inf(Stream_base* stm)
-        : inf_base(stm)
+    inf(Stream_base* stm, int32_t maxSize)
+        : inf_base(stm, maxSize)
     {
         inflateInit(&strm);
     }
@@ -334,8 +345,8 @@ public:
 
 class gunz : public inf_base {
 public:
-    gunz(Stream_base* stm)
-        : inf_base(stm)
+    gunz(Stream_base* stm, int32_t maxSize)
+        : inf_base(stm, maxSize)
     {
         inflateInit2(&strm, 15 + 16);
     }
@@ -352,8 +363,8 @@ public:
 
 class infraw : public inf_base {
 public:
-    infraw(Stream_base* stm)
-        : inf_base(stm)
+    infraw(Stream_base* stm, int32_t maxSize)
+        : inf_base(stm, maxSize)
     {
         inflateInit2(&strm, -15);
     }

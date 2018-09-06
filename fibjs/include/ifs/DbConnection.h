@@ -26,8 +26,7 @@ public:
     virtual result_t begin(AsyncEvent* ac) = 0;
     virtual result_t commit(AsyncEvent* ac) = 0;
     virtual result_t rollback(AsyncEvent* ac) = 0;
-    virtual result_t trans(v8::Local<v8::Function> func) = 0;
-    virtual result_t execute(exlib::string sql, obj_ptr<NArray>& retVal, AsyncEvent* ac) = 0;
+    virtual result_t trans(v8::Local<v8::Function> func, bool& retVal) = 0;
     virtual result_t execute(exlib::string sql, OptArgs args, obj_ptr<NArray>& retVal, AsyncEvent* ac) = 0;
     virtual result_t format(exlib::string sql, OptArgs args, exlib::string& retVal) = 0;
 
@@ -57,7 +56,6 @@ public:
     ASYNC_MEMBER0(DbConnection_base, begin);
     ASYNC_MEMBER0(DbConnection_base, commit);
     ASYNC_MEMBER0(DbConnection_base, rollback);
-    ASYNC_MEMBERVALUE2(DbConnection_base, execute, exlib::string, obj_ptr<NArray>);
     ASYNC_MEMBERVALUE3(DbConnection_base, execute, exlib::string, OptArgs, obj_ptr<NArray>);
 };
 }
@@ -177,6 +175,8 @@ inline void DbConnection_base::s_rollback(const v8::FunctionCallbackInfo<v8::Val
 
 inline void DbConnection_base::s_trans(const v8::FunctionCallbackInfo<v8::Value>& args)
 {
+    bool vr;
+
     METHOD_NAME("DbConnection.trans");
     METHOD_INSTANCE(DbConnection_base);
     METHOD_ENTER();
@@ -185,9 +185,9 @@ inline void DbConnection_base::s_trans(const v8::FunctionCallbackInfo<v8::Value>
 
     ARG(v8::Local<v8::Function>, 0);
 
-    hr = pInst->trans(v0);
+    hr = pInst->trans(v0, vr);
 
-    METHOD_VOID();
+    METHOD_RETURN();
 }
 
 inline void DbConnection_base::s_execute(const v8::FunctionCallbackInfo<v8::Value>& args)
@@ -197,16 +197,6 @@ inline void DbConnection_base::s_execute(const v8::FunctionCallbackInfo<v8::Valu
     METHOD_NAME("DbConnection.execute");
     METHOD_INSTANCE(DbConnection_base);
     METHOD_ENTER();
-
-    ASYNC_METHOD_OVER(1, 1);
-
-    ARG(exlib::string, 0);
-
-    if (!cb.IsEmpty()) {
-        pInst->acb_execute(v0, cb);
-        hr = CALL_RETURN_NULL;
-    } else
-        hr = pInst->ac_execute(v0, vr);
 
     ASYNC_METHOD_OVER(-1, 1);
 

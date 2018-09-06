@@ -36,6 +36,67 @@ public:
 static std::list<obj_ptr<cache_node>> s_cache;
 static exlib::spinlock s_cachelock;
 
+result_t fs_base::setZipFS(exlib::string fname, Buffer_base* data)
+{
+    result_t hr;
+    std::list<obj_ptr<cache_node>>::iterator it;
+    obj_ptr<ZipFile_base> zfile;
+    obj_ptr<cache_node> _node;
+
+    hr = zip_base::cc_open(data, "r", zip_base::_ZIP_DEFLATED, zfile);
+    if (hr < 0)
+        return hr;
+
+    obj_ptr<NArray> list;
+    hr = zfile->cc_readAll("", list);
+    if (hr < 0)
+        return hr;
+
+    exlib::string safe_name;
+    path_base::normalize(fname, safe_name);
+
+    _node = new cache_node();
+    _node->m_name = safe_name;
+    _node->m_list = list;
+    _node->m_date = INFINITY;
+    _node->m_mtime.now();
+
+    s_cachelock.lock();
+    for (it = s_cache.begin(); it != s_cache.end(); ++it)
+        if ((*it)->m_name == safe_name) {
+            *it = _node;
+            break;
+        }
+    if (it == s_cache.end())
+        s_cache.push_back(_node);
+    s_cachelock.unlock();
+    return 0;
+}
+
+result_t fs_base::clearZipFS(exlib::string fname)
+{
+    if (fname.empty()) {
+        s_cachelock.lock();
+        s_cache.clear();
+        s_cachelock.unlock();
+    } else {
+        std::list<obj_ptr<cache_node>>::iterator it;
+
+        exlib::string safe_name;
+        path_base::normalize(fname, safe_name);
+
+        s_cachelock.lock();
+        for (it = s_cache.begin(); it != s_cache.end(); ++it)
+            if ((*it)->m_name == safe_name) {
+                s_cache.erase(it);
+                break;
+            }
+        s_cachelock.unlock();
+    }
+
+    return 0;
+}
+
 result_t fs_base::openFile(exlib::string fname, exlib::string flags,
     obj_ptr<SeekableStream_base>& retVal, AsyncEvent* ac)
 {
@@ -85,7 +146,7 @@ result_t fs_base::openFile(exlib::string fname, exlib::string flags,
         s_cachelock.unlock();
 
         if (_node && (_now.diff(_node->m_date) > 3000)) {
-            hr = cc_openFile(zip_file, "r", zip_stream);
+            hr = openFile(zip_file, "r", zip_stream, ac);
             if (hr < 0)
                 return hr;
 
@@ -104,7 +165,7 @@ result_t fs_base::openFile(exlib::string fname, exlib::string flags,
 
         if (_node == NULL) {
             if (zip_stream == NULL) {
-                hr = cc_openFile(zip_file, "r", zip_stream);
+                hr = openFile(zip_file, "r", zip_stream, ac);
                 if (hr < 0)
                     return hr;
 
@@ -191,6 +252,11 @@ result_t fs_base::openFile(exlib::string fname, exlib::string flags,
         obj_ptr<File> pFile = new File();
         result_t hr;
 
+        Isolate* isolate = Runtime::check() ? Isolate::current() : ac->isolate();
+
+        if (isolate && !isolate->m_bFileAccess)
+            return CHECK_ERROR(CALL_E_INVALID_CALL);
+
         hr = pFile->open(safe_name, flags);
         if (hr < 0)
             return hr;
@@ -248,7 +314,7 @@ result_t fs_base::openTextStream(exlib::string fname, exlib::string flags,
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     obj_ptr<SeekableStream_base> pFile;
-    result_t hr = cc_openFile(fname, flags, pFile);
+    result_t hr = openFile(fname, flags, pFile, ac);
     if (hr < 0)
         return hr;
 
@@ -265,7 +331,7 @@ result_t fs_base::readTextFile(exlib::string fname, exlib::string& retVal,
     obj_ptr<Buffer_base> buf;
     result_t hr;
 
-    hr = cc_openFile(fname, "r", f);
+    hr = openFile(fname, "r", f, ac);
     if (hr < 0)
         return hr;
 
@@ -293,7 +359,7 @@ result_t fs_base::readFile(exlib::string fname, exlib::string encoding,
     obj_ptr<Buffer_base> buf;
     result_t hr;
 
-    hr = cc_openFile(fname, "r", f);
+    hr = openFile(fname, "r", f, ac);
     if (hr < 0)
         return hr;
 
@@ -347,7 +413,7 @@ result_t fs_base::writeTextFile(exlib::string fname, exlib::string txt,
     obj_ptr<SeekableStream_base> f;
     result_t hr;
 
-    hr = cc_openFile(fname, "w", f);
+    hr = openFile(fname, "w", f, ac);
     if (hr < 0)
         return hr;
 
@@ -367,7 +433,7 @@ result_t fs_base::writeFile(exlib::string fname, Buffer_base* data, AsyncEvent* 
     obj_ptr<SeekableStream_base> f;
     result_t hr;
 
-    hr = cc_openFile(fname, "w", f);
+    hr = openFile(fname, "w", f, ac);
     if (hr < 0)
         return hr;
 
@@ -384,7 +450,7 @@ result_t fs_base::appendFile(exlib::string fname, Buffer_base* data, AsyncEvent*
     obj_ptr<SeekableStream_base> f;
     result_t hr;
 
-    hr = cc_openFile(fname, "a", f);
+    hr = openFile(fname, "a", f, ac);
     if (hr < 0)
         return hr;
 
